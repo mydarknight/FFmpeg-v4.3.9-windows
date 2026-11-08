@@ -48,6 +48,11 @@ jobs:
           # 3. 兼容修复 aom 仓储 CMake 路径变更
           sed -i 's|\.\./build/cmake/toolchains|\.\./cmake/toolchains|g' cross_compile_ffmpeg.sh || true
 
+          # 4. 【关键修复】禁用导致 lame ICE (Internal Compiler Error) 的 stack-clash-protection / 修复 GCC MinGW 内部编译器崩溃 (ICE in i386_pe_seh_unwind_emit)
+          sed -i 's/-fstack-clash-protection//g' cross_compile_ffmpeg.sh
+          # 如果 lame 单独有 CFLAGS，追加 -fno-stack-clash-protection 彻底免疫
+          sed -i 's/generic_configure "--enable-nasm"/CFLAGS="$CFLAGS -fno-stack-clash-protection" generic_configure "--enable-nasm"/g' cross_compile_ffmpeg.sh || true
+
       - name: Run Cross-Compilation
         working-directory: build-helpers
         run: |
