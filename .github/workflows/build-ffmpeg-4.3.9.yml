@@ -48,10 +48,14 @@ jobs:
           # 3. 兼容修复 aom 仓储 CMake 路径变更
           sed -i 's|\.\./build/cmake/toolchains|\.\./cmake/toolchains|g' cross_compile_ffmpeg.sh || true
 
-          # 4. 【关键修复】禁用导致 lame ICE (Internal Compiler Error) 的 stack-clash-protection / 修复 GCC MinGW 内部编译器崩溃 (ICE in i386_pe_seh_unwind_emit)
-          sed -i 's/-fstack-clash-protection//g' cross_compile_ffmpeg.sh
-          # 如果 lame 单独有 CFLAGS，追加 -fno-stack-clash-protection 彻底免疫
-          sed -i 's/generic_configure "--enable-nasm"/CFLAGS="$CFLAGS -fno-stack-clash-protection" generic_configure "--enable-nasm"/g' cross_compile_ffmpeg.sh || true
+          # 4. 【核心修复】修改 cross_compile_ffmpeg.sh 内部的 CFLAGS 声明
+          # 在脚本设置任何 CFLAGS/CXXFLAGS 的地方，强制追加 -fno-stack-clash-protection 和 -fno-cf-protection
+          sed -i '/export CFLAGS=/s/$/ -fno-stack-clash-protection -fno-cf-protection/' cross_compile_ffmpeg.sh || true
+          sed -i '/export CXXFLAGS=/s/$/ -fno-stack-clash-protection -fno-cf-protection/' cross_compile_ffmpeg.sh || true
+
+          # 5. 【兜底保证】直接修补 lame 编译配置
+          # lame 源码内部自带 configure，直接把 -O3 -ffast-math 等导致崩溃的过度优化降级为正常的 -O2
+          sed -i 's/build_lame()/build_lame()\n  export CFLAGS="-O2 -pipe -fno-stack-clash-protection -fno-cf-protection"\n  export CXXFLAGS="-O2 -pipe -fno-stack-clash-protection -fno-cf-protection"/' cross_compile_ffmpeg.sh
 
       - name: Run Cross-Compilation
         working-directory: build-helpers
