@@ -1,9 +1,17 @@
-name: Build FFmpeg 4.3.9 (Win64 static, nonfree, MF)
+name: Build FFmpeg (Win64 static, nonfree, full codecs)
 
 on:
   workflow_dispatch:
+    inputs:
+      ffmpeg_version:
+        description: 'FFmpeg 版本（4.3.9 / 5.1.6 / 6.1.2）'
+        required: true
+        default: '4.3.9'
   push:
     branches: [ main ]
+
+env:
+  FFMPEG_VERSION: ${{ github.event.inputs.ffmpeg_version || '4.3.9' }}
 
 jobs:
   build:
@@ -13,73 +21,90 @@ jobs:
         shell: msys2 {0}
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Setup MSYS2 (MinGW64 toolchain)
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          update: false
+          update: true
           install: >
             base-devel
-            git
-            curl
-            autoconf
-            automake
-            libtool
+            git curl wget tar xz
+            autoconf automake libtool make
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-nasm
             mingw-w64-x86_64-yasm
-            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-pkgconf
 
-      - name: Install external codec libs (optional, failures tolerated)
+      # ---------- 参考两份配置，尽可能装齐编解码/滤镜库 ----------
+      - name: Install codec / filter libraries
         run: |
-          for p in \
-            mingw-w64-x86_64-x264 \
-            mingw-w64-x86_64-x265 \
-            mingw-w64-x86_64-libvpx \
-            mingw-w64-x86_64-libvorbis \
-            mingw-w64-x86_64-opus \
-            mingw-w64-x86_64-lame \
-            mingw-w64-x86_64-libtheora \
-            mingw-w64-x86_64-speex \
-            mingw-w64-x86_64-libgsm \
-            mingw-w64-x86_64-opencore-amr \
-            mingw-w64-x86_64-vo-amrwbenc \
-            mingw-w64-x86_64-wavpack \
-            mingw-w64-x86_64-libwebp \
-            mingw-w64-x86_64-libdav1d \
-            mingw-w64-x86_64-aom \
-            mingw-w64-x86_64-rav1e \
-            mingw-w64-x86_64-xvidcore \
-            mingw-w64-x86_64-libbluray \
-            mingw-w64-x86_64-libssh \
-            mingw-w64-x86_64-libass \
-            mingw-w64-x86_64-freetype \
-            mingw-w64-x86_64-fribidi \
-            mingw-w64-x86_64-harfbuzz \
-            mingw-w64-x86_64-zimg \
-            mingw-w64-x86_64-libzvbi \
-            mingw-w64-x86_64-libmysofa \
-            mingw-w64-x86_64-openmpt \
-            mingw-w64-x86_64-libbs2b \
-            mingw-w64-x86_64-libilbc \
-            mingw-w64-x86_64-libmodplug \
-            mingw-w64-x86_64-twolame \
-            mingw-w64-x86_64-soxr \
-            mingw-w64-x86_64-libgme \
-            mingw-w64-x86_64-vid.stab \
-            mingw-w64-x86_64-libxml2 \
-            mingw-w64-x86_64-gmp \
-            mingw-w64-x86_64-gnutls \
-            mingw-w64-x86_64-srt \
-            mingw-w64-x86_64-zeromq \
-            mingw-w64-x86_64-librist ; do
+          PKGS="
+            mingw-w64-x86_64-x264
+            mingw-w64-x86_64-x265
+            mingw-w64-x86_64-aom
+            mingw-w64-x86_64-rav1e
+            mingw-w64-x86_64-svt-av1
+            mingw-w64-x86_64-vvenc
+            mingw-w64-x86_64-kvazaar
+            mingw-w64-x86_64-libvpx
+            mingw-w64-x86_64-libdav1d
+            mingw-w64-x86_64-openh264
+            mingw-w64-x86_64-xvidcore
+            mingw-w64-x86_64-lame
+            mingw-w64-x86_64-opus
+            mingw-w64-x86_64-libvorbis
+            mingw-w64-x86_64-libtheora
+            mingw-w64-x86_64-speex
+            mingw-w64-x86_64-twolame
+            mingw-w64-x86_64-opencore-amr
+            mingw-w64-x86_64-vo-amrwbenc
+            mingw-w64-x86_64-libilbc
+            mingw-w64-x86_64-libgsm
+            mingw-w64-x86_64-wavpack
+            mingw-w64-x86_64-libwebp
+            mingw-w64-x86_64-zimg
+            mingw-w64-x86_64-libzvbi
+            mingw-w64-x86_64-libmysofa
+            mingw-w64-x86_64-libsoxr
+            mingw-w64-x86_64-srt
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-gnutls
+            mingw-w64-x86_64-gmp
+            mingw-w64-x86_64-libgme
+            mingw-w64-x86_64-libmodplug
+            mingw-w64-x86_64-libbs2b
+            mingw-w64-x86_64-libbluray
+            mingw-w64-x86_64-libass
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-fribidi
+            mingw-w64-x86_64-harfbuzz
+            mingw-w64-x86_64-fontconfig
+            mingw-w64-x86_64-vid.stab
+            mingw-w64-x86_64-rubberband
+            mingw-w64-x86_64-openmpt
+            mingw-w64-x86_64-snappy
+            mingw-w64-x86_64-flite
+            mingw-w64-x86_64-libcaca
+            mingw-w64-x86_64-tesseract-ocr
+            mingw-w64-x86_64-lensfun
+            mingw-w64-x86_64-libvmaf
+            mingw-w64-x86_64-openjpeg2
+            mingw-w64-x86_64-xz
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-ffnvcodec
+            mingw-w64-x86_64-amf
+            mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-libmfx
+          "
+          for p in $PKGS; do
             pacman -S --needed --noconfirm "$p" || echo "WARN: skip $p"
           done
+          # 清缓存，省 runner 磁盘
+          pacman -Scc --noconfirm || true
 
-      - name: Build fdk-aac 2.0.2 (static, nonfree)
+      # ---------- fdk-aac 必须自编译（MSYS2 不提供 nonfree 包） ----------
+      - name: Build fdk-aac 2.0.2 (static)
         run: |
           set -e
           git clone --depth 1 --branch v2.0.2 https://github.com/mstorsjo/fdk-aac.git
@@ -89,43 +114,81 @@ jobs:
           make -j"$(nproc)"
           make install
 
-      - name: Download FFmpeg 4.3.9
+      - name: Download FFmpeg ${{ env.FFMPEG_VERSION }}
         run: |
           set -e
-          curl -L -o ffmpeg-4.3.9.tar.xz https://ffmpeg.org/releases/ffmpeg-4.3.9.tar.xz
-          tar xf ffmpeg-4.3.9.tar.xz
+          curl -L -o ffmpeg.tar.xz \
+            "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+          tar xf ffmpeg.tar.xz
 
+      # ---------- 集大成 configure ----------
       - name: Configure FFmpeg
         run: |
           set -e
-          cd ffmpeg-4.3.9
+          cd "ffmpeg-${FFMPEG_VERSION}"
+
+          # 显式但带版本兼容性的开关：只在 configure --help 里存在时才加
+          OPT=()
+          for o in --enable-nvenc --enable-nvdec --enable-amf --enable-libmfx ; do
+            if ./configure --help | grep -q -- "$o"; then
+              OPT+=("$o")
+            else
+              echo "skip: $o (not supported by ffmpeg ${FFMPEG_VERSION})"
+            fi
+          done
+
           ./configure \
             --pkg-config-flags="--static" \
             --extra-ldflags="-static" \
+            --extra-cflags="-O3 -mtune=generic \
+              -DLIBTWOLAME_STATIC -DMODPLUG_STATIC -DCACA_STATIC \
+              -Wno-error=implicit-function-declaration \
+              -Wno-error=implicit-int" \
+            --extra-libs="-lharfbuzz -lm -lole32 -loleaut32 -luuid -ldxgi -ld3d11" \
             --enable-gpl \
             --enable-nonfree \
             --enable-version3 \
             --enable-libfdk-aac \
             --enable-static \
-            --disable-shared
-          # 说明：
-          # - h264_mf / mediafoundation 依赖的 mfplat 由 configure 自动探测
-          # - 其它外部库 (x264/x265/vpx/...) 默认 autodetect，找到即启用
-          # - 不需要 --enable-mediafoundation，4.3 里没有这个开关
+            --disable-shared \
+            --disable-debug \
+            --arch=x86_64 \
+            --target-os=mingw32 \
+            "${OPT[@]}"
+          # 说明：x264/x265/aom/rav1e/svt-av1/vpx/dav1d/opus/... 全部靠
+          #       装包后的 pkg-config autodetect 自动启用，
+          #       4.3.9 不认识 svt-av1/vvenc 也只会静默跳过，不会报错。
 
       - name: Build FFmpeg
         run: |
           set -e
-          cd ffmpeg-4.3.9
+          cd "ffmpeg-${FFMPEG_VERSION}"
           make -j"$(nproc)"
-          echo "=== version ==="
-          ./ffmpeg.exe -hide_banner -version
-          echo "=== MF / fdk encoders ==="
-          ./ffmpeg.exe -hide_banner -encoders | grep -Ei "mf|fdk" || true
+
+      - name: Report enabled features
+        run: |
+          cd "ffmpeg-${FFMPEG_VERSION}"
+          echo "================ CONFIGURATION ================"
+          ./ffmpeg.exe -hide_banner -version | sed -n '2,3p'
+          echo "================ ENCODERS (mf / av1 / aac) ===="
+          cd "ffmpeg-${FFMPEG_VERSION}"
+          ./ffmpeg.exe -hide_banner -encoders | grep -Ei "qsv|mf|x264|x265|fdk" || true
+          ./ffmpeg.exe -hide_banner -hwaccels
+
+      - name: Collect runtime DLLs
+        run: |
+          cd "ffmpeg-${FFMPEG_VERSION}"
+          cp /mingw64/bin/libmfx-1.dll . 2>/dev/null || true
+          # 如果之前 --extra-ldflags="-static" 没吃掉，也一起收
+          for d in libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll ; do
+            [ -f "/mingw64/bin/$d" ] && cp "/mingw64/bin/$d" . || true
+          done
 
       - name: Upload ffmpeg.exe
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-4.3.9-win64
-          path: ffmpeg-4.3.9/ffmpeg.exe
+          name: ffmpeg-${{ env.FFMPEG_VERSION }}-win64
+          path: |
+            ffmpeg-${{ env.FFMPEG_VERSION }}/ffmpeg.exe
+            ffmpeg-${{ env.FFMPEG_VERSION }}/libmfx-1.dll
           if-no-files-found: error
