@@ -47,6 +47,8 @@ jobs:
           # FFmpeg 6.0 新增
           sed -i 's/--enable-filter=drawtext//g' cross_compile_ffmpeg.sh
           sed -i 's/--enable-libharfbuzz//g' cross_compile_ffmpeg.sh
+          # 临时禁用 svt-av1
+          sed -i 's/--enable-libsvtav1//g' cross_compile_ffmpeg.sh
 
           # 3. 兼容修复 aom 仓储 CMake 路径变更
           sed -i 's|\.\./build/cmake/toolchains|\.\./cmake/toolchains|g' cross_compile_ffmpeg.sh || true
