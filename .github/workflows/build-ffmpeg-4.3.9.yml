@@ -40,7 +40,7 @@ jobs:
           cd build-helpers
 
           # 1. 注入 MediaFoundation 支持（启用 h264_mf, hevc_mf, aac_mf 等）
-          sed -i 's/config_options="/config_options="--enable-mediafoundation /' cross_compile_ffmpeg.sh
+          # sed -i 's/config_options="/config_options="--enable-mediafoundation /' cross_compile_ffmpeg.sh
 
           # 2. 移除 FFmpeg 4.3 不支持的现代新增选项（避免 configure 报错）
           sed -i 's/--enable-libaribcaption//g' cross_compile_ffmpeg.sh
