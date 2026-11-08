@@ -33,7 +33,6 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-nasm
-            mingw-w64-x86_64-yasm
             mingw-w64-x86_64-pkgconf
 
       # ---------- 参考两份配置，尽可能装齐编解码/滤镜库 ----------
