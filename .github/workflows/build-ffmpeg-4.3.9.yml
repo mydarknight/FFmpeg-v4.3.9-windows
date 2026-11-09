@@ -39,23 +39,21 @@ jobs:
           git clone --depth=1 https://github.com/rdp/ffmpeg-windows-build-helpers.git build-helpers
           cd build-helpers
 
-          # 1. 注入 MediaFoundation 支持（启用 h264_mf, hevc_mf, aac_mf 等）
-          # sed -i 's/config_options="/config_options="--enable-mediafoundation /' cross_compile_ffmpeg.sh
+          # 1. 兼容修复 aom 仓储 CMake 路径变更
+          sed -i 's|\.\./build/cmake/toolchains|\.\./cmake/toolchains|g' cross_compile_ffmpeg.sh || true
 
-          # 2. 移除 FFmpeg 4.3 不支持的现代新增选项（避免 configure 报错）
+          # 2. 移除 FFmpeg 4.3 不支持或在旧交叉环境报错的新增选项
           sed -i 's/--enable-libaribcaption//g' cross_compile_ffmpeg.sh
-          # FFmpeg 6.0 新增
           sed -i 's/--enable-filter=drawtext//g' cross_compile_ffmpeg.sh
           sed -i 's/--enable-libharfbuzz//g' cross_compile_ffmpeg.sh
-          # 临时禁用 svt-av1 vulkan
           sed -i 's/--enable-libsvtav1//g' cross_compile_ffmpeg.sh
           sed -i 's/--enable-vulkan//g' cross_compile_ffmpeg.sh
 
-          # 3. 兼容修复 aom 仓储 CMake 路径变更
-          sed -i 's|\.\./build/cmake/toolchains|\.\./cmake/toolchains|g' cross_compile_ffmpeg.sh || true
-
-          # 4. 【完美解决 lame 崩溃】为 lame configure 加上 --disable-hardening 选项（Issue #783 官方方案）
+          # 3. 【完美解决 lame 崩溃】为 lame configure 加上 --disable-hardening 选项（Issue #783 官方方案）
           sed -i 's/generic_configure "--enable-nasm --enable-libmpg123"/generic_configure "--enable-nasm --enable-libmpg123 --disable-hardening"/' cross_compile_ffmpeg.sh
+
+          # 4. 注入 --enable-avresample（满足 homebridge 等老项目的兼容需求）
+          sed -i 's/config_options="/config_options="--enable-avresample /' cross_compile_ffmpeg.sh
 
       - name: Run Cross-Compilation
         working-directory: build-helpers
@@ -84,8 +82,27 @@ jobs:
       - name: Collect Output Binaries
         run: |
           mkdir -p output
-          # 将生成的 exe 收集至 output 文件夹
-          find build-helpers/sandbox -type f -name "*.exe" -exec cp -v {} output/ \;
+
+          # 寻找生成的目标主程序目录（处理带 fdk-aac 的实际产物路径）
+          SRC_DIR=$(find build-helpers/sandbox/win64 -maxdepth 1 -type d -name "ffmpeg_git_*" | head -n 1)
+          
+          echo "Found source directory: $SRC_DIR"
+          
+          # 精准拷贝主程序，排除 *_g.exe (调试版) 以及其他依赖库的测试 exe
+          for bin in ffmpeg ffprobe ffplay; do
+            if [ -f "$SRC_DIR/$bin.exe" ]; then
+              cp "$SRC_DIR/$bin.exe" output/
+            fi
+          done
+
+          # 使用交叉编译工具链中的 strip 剥离符号，完成终极瘦身
+          STRIP_TOOL=$(find build-helpers/sandbox/cross_compilers -name "x86_64-w64-mingw32-strip" | head -n 1)
+          if [ -n "$STRIP_TOOL" ]; then
+            echo "Stripping binaries with $STRIP_TOOL..."
+            $STRIP_TOOL output/*.exe
+          fi
+
+          echo "Final deliverables:"
           ls -lh output/
 
       - name: Upload Artifacts
@@ -93,4 +110,4 @@ jobs:
         with:
           name: ffmpeg-4.3.9-win64-static
           path: output/
-          retention-days: 14
+          retention-days: 90
