@@ -55,7 +55,7 @@ jobs:
           sed -i 's/--enable-libaribcaption//g' cross_compile_ffmpeg.sh
           sed -i 's/--enable-filter=drawtext//g' cross_compile_ffmpeg.sh
           sed -i 's/--enable-libharfbuzz//g' cross_compile_ffmpeg.sh
-          sed -i 's/--enable-libsvtav1//g' cross_compile_ffmpeg.sh
+          # sed -i 's/--enable-libsvtav1//g' cross_compile_ffmpeg.sh
           sed -i 's/--enable-vulkan//g' cross_compile_ffmpeg.sh
 
           # 6. 【完美解决 lame 崩溃】为 lame configure 加上 --disable-hardening 选项（Issue #783 官方方案）
